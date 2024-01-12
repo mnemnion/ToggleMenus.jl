@@ -21,18 +21,16 @@ end
 const StringVector = Vector{S} where S <: AbstractString
 
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10; kwargs...)
-   !allunique(settings) && error("all settings must be unique: $settings")
-    icons = Dict{Char,Union{String,Char}}()
+    icons = Vector{Union{String,Char}}()
     iconwidth = reduce(max, map((x) -> printable_textwidth(string(x)), settings))
     for char in settings
         if char == '\0'
-            icons[char] = " "^iconwidth
+            push!(icons, " "^iconwidth)
         else
-            icons[char] = char
+            push!(icons, char)
         end
     end
-    settings = [x for x in settings if x != '\0']
-    ToggleMenuMaker(settings, icons, header, pagesize, Config(;kwargs...))
+    ToggleMenuMaker(header, settings, icons, pagesize; kwargs...)
 end
 
 
@@ -55,7 +53,7 @@ set of options.
              aspects of menu presentation and behavior.  For more details consult the
              relevant docstring.
 """
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Char}, pagesize=10; kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Union{String,Char}}, pagesize=10; kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
@@ -66,7 +64,11 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
         icodict[char] = icons[idx]
     end
     settings = [x for x in settings if x != '\0']
-    ToggleMenuMaker(settings, icodict, header, pagesize, Config(; kwargs...))
+    kwargdict = Dict()
+    for (k,v) in kwargs
+        kwargdict[k] = v
+    end
+    ToggleMenuMaker(settings, icodict, header, pagesize, Config(; kwargdict...))
 end
 
 
