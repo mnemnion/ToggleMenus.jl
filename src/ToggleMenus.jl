@@ -13,6 +13,7 @@ mutable struct ToggleMenuMaker
     settings::Vector{Char}
     icons::Dict{Char,Union{String,Char}}
     header::Union{AbstractString,Function}
+    braces::Tuple{String,String}
     pagesize::Int
     config::Config
     # probably a header template? we'll get there
@@ -21,13 +22,13 @@ end
 const StringVector = Vector{S} where S <: AbstractString
 
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10; kwargs...)
-    icons = Vector{Union{String,Char}}()
+    icons = Vector{String}()
     iconwidth = reduce(max, map((x) -> printable_textwidth(string(x)), settings))
     for char in settings
         if char == '\0'
             push!(icons, " "^iconwidth)
         else
-            push!(icons, char)
+            push!(icons, string(char))
         end
     end
     ToggleMenuMaker(header, settings, icons, pagesize; kwargs...)
@@ -53,7 +54,7 @@ set of options.
              aspects of menu presentation and behavior.  For more details consult the
              relevant docstring.
 """
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Union{String,Char}}, pagesize=10; kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
@@ -65,10 +66,15 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
     end
     settings = [x for x in settings if x != '\0']
     kwargdict = Dict()
-    for (k,v) in kwargs
-        kwargdict[k] = v
+    braces = ("[", "]")
+    for (key, val) in kwargs
+        if key == :braces
+            braces = (string(val[1]), string(val[2]))
+        else
+            kwargdict[key] = val
+        end
     end
-    ToggleMenuMaker(settings, icodict, header, pagesize, Config(; kwargdict...))
+    ToggleMenuMaker(settings, icodict, header, braces, pagesize, Config(; kwargdict...))
 end
 
 
@@ -97,6 +103,7 @@ mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{Config}
     selections::Vector{Char}
     icons::Dict{Char,Union{String,Char}}
     header::Union{AbstractString,Function}
+    braces::Tuple{String,String}
     pagesize::Int
     pageoffset::Int
     cursor::Int
@@ -108,18 +115,19 @@ function ToggleMenu(options::StringVector,
                     selections::Vector{Char},
                     icons::Dict{Char,Union{String,Char}},
                     header::Union{AbstractString,Function},
+                    braces::Tuple{String,String},
                     config::Config,
                     pagesize=10)
-    ToggleMenu(options, settings, selections, icons, header, pagesize, 0, 1, config)
+    ToggleMenu(options, settings, selections, icons, header, braces, pagesize, 0, 1, config)
 end
 
 function ToggleMenu(options::StringVector, maker::ToggleMenuMaker)
     selections = fill(maker.settings[1], length(options))
-    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.config, maker.pagesize)
+    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.config, maker.pagesize)
 end
 
 function ToggleMenu(options::StringVector, selections::Vector{Char}, maker::ToggleMenuMaker)
-    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.config, maker.pagesize)
+    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.config, maker.pagesize)
 end
 
 function TerminalMenus.header(menu::ToggleMenu)
@@ -173,8 +181,14 @@ numoptions(menu::ToggleMenu) = length(menu.options)
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
     width = displaysize(stdout)[2]
     icon = menu.icons[menu.selections[idx]]
-    width -= printable_textwidth(string(icon)) + 6
-    print(buf, '[', icon, ']', ' ')
+    if menu.selections[idx] != '\0'
+        left, right = menu.braces[1], menu.braces[2]
+    else
+        left = " "^printable_textwidth(menu.braces[1])
+        right = " "^printable_textwidth(menu.braces[2])
+    end
+    width -= printable_textwidth(string(icon) * left * right) + 4
+    print(buf, left, icon, right, ' ')
     body = fit_string_in_field(replace(menu.options[idx], "\n" => "\\n"), width)
     print(buf, body)
 end
@@ -199,10 +213,8 @@ function _prevselection(menu::ToggleMenu)
     end
 end
 
-keyvec = []  # TODO remove
 function keypress(menu::ToggleMenu, i::UInt32)
     char = Char(i)
-    push!(keyvec, (i, char))
     if char == '\e'
         cancel(menu)
         return true
