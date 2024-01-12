@@ -2,59 +2,105 @@ module ToggleMenus
 
 export ToggleMenu, ToggleMenuMaker, makemenu
 
+import REPL.TerminalMenus: AbstractMenu, Config, cancel, keypress, move_down!, move_up!,
+    numoptions, pick, selected, writeline
+
 using REPL.TerminalMenus
 
 mutable struct ToggleMenuMaker
     settings::Vector{Char}
     icons::Dict{Char,Char}
+    header::AbstractString
     pagesize::Int
-    config::TerminalMenus.Config
+    config::Config
     # probably a header template? we'll get there
 end
 
 const StringVector = Vector{S} where S <: AbstractString
 
-function ToggleMenuMaker(settings::Vector{Char}, pagesize=10, kwargs...)
+function ToggleMenuMaker(header::AbstractString, settings::Vector{Char}, pagesize=10, kwargs...)
+    !allunique(settings) && error("all settings must be unique: $settings")
     icons = Dict{Char,Char}()
     for char in settings
         icons[char] = char
     end
-    ToggleMenuMaker(settings, icons, pagesize, TerminalMenus.Config(kwargs...))
+    ToggleMenuMaker(settings, icons, header, pagesize, Config(kwargs...))
 end
 
-function ToggleMenuMaker(settings::Vector{Char}, icons::Vector{Char}, pagesize=10, kwargs...)
+
+"""
+    ToggleMenuMaker(header, settings, icons, pagesize=10, kwargs...)
+
+Create a template for a ToggleMaker, which may be passed to `makemenu` along with a
+set of options.
+
+- `header`: A string, which should inform the user what the options do.
+- `settings`: A `Vector{Char}`, every element must be unique, and should be easy to
+              type.  Pressing a key corresponding to one of the settings will toggle
+              that option directly to that setting.
+- `icons`:  Optional `Vector{Char}`, if provided these must also be unique, and must
+            have the same number of elements as `settings`.  These are used as the
+            selection icons, which will default to `settings` if none are provided.
+- `pagesize`:  Number of options to display before scrolling.
+- `kwargs`:  Are passed through to TerminalMenus.Config, and may be used to configure
+             aspects of menu presentation and behavior.  For more details consult the
+             relevant docstring.
+"""
+function ToggleMenuMaker(header::AbstractString, settings::Vector{Char}, icons::Vector{Char}; pagesize=10, kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
+    !allunique(settings) && error("all settings must be unique: $settings")
+    !allunique(icons) && error("all icons must be unique $icons")
     icodict = Dict{Char,Char}()
     for (idx,char) ∈ settings |> enumerate
         icodict[char] = icons[idx]
     end
-    ToggleMenuMaker(settings, icodict, pagesize, TerminalMenus.Config(kwargs...))
+    ToggleMenuMaker(settings, icodict, header, pagesize, Config(;kwargs...))
 end
 
+
+"""
+    makemenu(maker::ToggleMenuMaker, options::StringVector)::ToggleMenu
+
+Makes a `ToggleMenu`.  The `options` are a vector of strings which have states which
+may be toggled through.
+"""
 makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, maker)
 
-mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{TerminalMenus.Config}
+mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{Config}
     options::StringVector
-    pagesize::Int
-    pageoffset::Int
     settings::Vector{Char}
     selections::Vector{Char}
     icons::Dict{Char,Char}
-    config::TerminalMenus.Config
+    header::AbstractString
+    pagesize::Int
+    pageoffset::Int
+    cursor::Int
+    config::Config
 end
 
 function ToggleMenu(options::StringVector,
                     settings::Vector{Char},
                     selections::Vector{Char},
+                    icons::Dict{Char,Char},
+                    header::AbstractString,
+                    config::Config,
+                    pagesize=10)
+    ToggleMenu(options, settings, selections, icons, header, pagesize, 0, 1, config)
+end
+
+#=
+function ToggleMenu(options::StringVector,
+                    settings::Vector{Char},
+                    selections::Vector{Char},
                     pagesize=10,
                     kwargs...)
-    icons = Dict{Char,Char}
+    icons = Dict{Char,Char}()
     for char in settings
         icons[char] = char
     end
-    ToggleMenu(options, pagesize, 0, settings, selections, icons, TerminalMenus.Config(kwargs...))
+    ToggleMenu(options, settings, selections, icons, pagesize, 0, 1, TerminalMenus.Config(kwargs...))
 end
 
 function ToggleMenu(options::StringVector,
@@ -65,32 +111,61 @@ function ToggleMenu(options::StringVector,
     selections = fill(settings[1], length(options))
     ToggleMenu(options, settings, selections, pagesize, kwargs...)
 end
+=#
 
 function ToggleMenu(options::StringVector, maker::ToggleMenuMaker)
     selections = fill(maker.settings[1], length(options))
-    ToggleMenu(options, maker.pagesize, 0, maker.settings, selections, maker.icons, maker.config)
+    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.config, maker.pagesize)
 end
 
 function TerminalMenus.header(menu::ToggleMenu)
-    "A ToggleMenu"
+    "A Header $(menu.cursor)"
 end
 
-TerminalMenus.pick(::ToggleMenu, ::Int)::Bool = true
+function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
+    m.cursor = invoke(move_up!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+end
 
-TerminalMenus.cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.options))
+function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
+    m.cursor = invoke(move_down!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+end
 
-TerminalMenus.numoptions(menu::ToggleMenu) = length(menu.options)
+pick(::ToggleMenu, ::Int)::Bool = true
 
-function TerminalMenus.writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, ::Bool)
+cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.options))
+
+numoptions(menu::ToggleMenu) = length(menu.options)
+
+function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
+    if cursor
+        menu.cursor = idx
+    end
     print(buf, '[', menu.icons[menu.selections[idx]], ']', ' ')
     print(buf, replace(menu.options[idx], "\n" => "\\n"))
 end
 
-function TerminalMenus.keypress(menu::ToggleMenu, i::UInt32)
-    false
+function _nextselection(menu::ToggleMenu)
+    current = menu.selections[menu.cursor]
+    idx = findfirst(==(current), menu.settings)
+    if idx == length(menu.settings)
+        return menu.settings[1]
+    else
+        return menu.settings[idx + 1]
+    end
 end
 
-function TerminalMenus.selected(menu::ToggleMenu)
+function keypress(menu::ToggleMenu, i::UInt32)
+    char = Char(i)
+    if char == '\t'
+        set = _nextselection(menu)
+        menu.selections[menu.cursor] = set
+    elseif char ∈ menu.settings
+        menu.selections[menu.cursor] = char
+    end
+    return false
+end
+
+function selected(menu::ToggleMenu)
     return menu.selections
 end
 
