@@ -47,7 +47,7 @@ set of options.
              aspects of menu presentation and behavior.  For more details consult the
              relevant docstring.
 """
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Char}; pagesize=10, kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Char}, pagesize=10; kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
@@ -157,11 +157,22 @@ function _nextselection(menu::ToggleMenu)
     end
 end
 
+function _prevselection(menu::ToggleMenu)
+    current = menu.selections[menu.cursor]
+    idx = findfirst(==(current), menu.settings)
+    if idx == 1
+        return menu.settings[end]
+    else
+        return menu.settings[idx - 1]
+    end
+end
+
 function keypress(menu::ToggleMenu, i::UInt32)
     char = Char(i)
-    if char == '\t'
-        set = _nextselection(menu)
-        menu.selections[menu.cursor] = set
+    if char == '\t' || char == 'ϩ'
+        menu.selections[menu.cursor] =  _nextselection(menu)
+    elseif char == 'Ϩ'
+        menu.selections[menu.cursor] = _prevselection(menu)
     elseif char ∈ menu.settings
         menu.selections[menu.cursor] = char
     end
