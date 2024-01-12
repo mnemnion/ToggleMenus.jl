@@ -20,13 +20,14 @@ end
 
 const StringVector = Vector{S} where S <: AbstractString
 
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10, kwargs...)
-    !allunique(settings) && error("all settings must be unique: $settings")
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10; kwargs...)
+   !allunique(settings) && error("all settings must be unique: $settings")
+   '\0' ∈ settings && error("'\\0' is not a valid setting, add it to initial selections")
     icons = Dict{Char,Char}()
     for char in settings
         icons[char] = char
     end
-    ToggleMenuMaker(settings, icons, header, pagesize, Config(kwargs...))
+    ToggleMenuMaker(settings, icons, header, pagesize, Config(;kwargs...))
 end
 
 
@@ -55,6 +56,7 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
     end
     !allunique(settings) && error("all settings must be unique: $settings")
     !allunique(icons) && error("all icons must be unique $icons")
+    '\0' ∈ settings && error("'\\0' is not a valid setting, add it to initial selections")
     icodict = Dict{Char,Char}()
     for (idx,char) ∈ settings |> enumerate
         icodict[char] = icons[idx]
@@ -64,12 +66,19 @@ end
 
 
 """
-    makemenu(maker::ToggleMenuMaker, options::StringVector)::ToggleMenu
+    makemenu(maker::ToggleMenuMaker, options, selections)::ToggleMenu
 
 Makes a `ToggleMenu`.  The `options` are a vector of strings which have states which
-may be toggled through.
+may be toggled through. `selections` is an optional Vector of initial selected states
+for the options, if a selection is `\0` the menu will skip that line and it will not
+be togglable
 """
 makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, maker)
+
+function makemenu(maker::ToggleMenuMaker, options::StringVector, selections::Vector{Char})
+    all(==('\0'), selections) && error("At least one selection must not be '\\0'")
+    return ToggleMenu(options, selections, maker)
+end
 
 mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{Config}
     options::StringVector
@@ -93,31 +102,12 @@ function ToggleMenu(options::StringVector,
     ToggleMenu(options, settings, selections, icons, header, pagesize, 0, 1, config)
 end
 
-#=
-function ToggleMenu(options::StringVector,
-                    settings::Vector{Char},
-                    selections::Vector{Char},
-                    pagesize=10,
-                    kwargs...)
-    icons = Dict{Char,Char}()
-    for char in settings
-        icons[char] = char
-    end
-    ToggleMenu(options, settings, selections, icons, pagesize, 0, 1, TerminalMenus.Config(kwargs...))
-end
-
-function ToggleMenu(options::StringVector,
-                    settings::Vector{Char},
-                    pagesize=10,
-                    kwargs...)
-
-    selections = fill(settings[1], length(options))
-    ToggleMenu(options, settings, selections, pagesize, kwargs...)
-end
-=#
-
 function ToggleMenu(options::StringVector, maker::ToggleMenuMaker)
     selections = fill(maker.settings[1], length(options))
+    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.config, maker.pagesize)
+end
+
+function ToggleMenu(options::StringVector, selections::Vector{Char}, maker::ToggleMenuMaker)
     ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.config, maker.pagesize)
 end
 
@@ -131,10 +121,36 @@ end
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
     m.cursor = invoke(move_up!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+    selected = m.selections[m.cursor]
+    if selected == '\0'
+        if length(m.options) == 1
+            return cursor
+        end
+        if cursor != 1
+            return move_up!(m, cursor - 1, lastoption)
+        else
+            return move_down!(m, cursor, lastoption)
+        end
+    else
+        return m.cursor
+    end
 end
 
 function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
     m.cursor = invoke(move_down!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+    selected = m.selections[m.cursor]
+    if selected == '\0'
+        if length(m.options) == 1
+            return cursor
+        end
+        if cursor != lastoption
+            return move_down!(m, cursor + 1, lastoption)
+        else
+            return move_up!(m, cursor, lastoption)
+        end
+    else
+        return m.cursor
+    end
 end
 
 pick(::ToggleMenu, ::Int)::Bool = true
@@ -145,9 +161,18 @@ numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
     width = displaysize(stdout)[2]
-    icon = menu.icons[menu.selections[idx]]
+    local noicon = menu.selections[idx] == '\0'
+    if noicon
+        icon = "  "
+    else
+        icon = menu.icons[menu.selections[idx]]
+    end
     width -= printable_textwidth(string(icon)) + 6
-    print(buf, '[', icon, ']', ' ')
+    if !noicon
+        print(buf, '[', icon, ']', ' ')
+    else
+        print(buf, " ", icon, "  ")
+    end
     body = fit_string_in_field(replace(menu.options[idx], "\n" => "\\n"), width)
     print(buf, body)
 end
