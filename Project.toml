@@ -5,6 +5,7 @@ version = "1.0.0-DEV"
 
 [deps]
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+StringManipulation = "892a3eda-7b42-436c-8928-eab12a02cf0e"
 
 [compat]
 julia = "1"

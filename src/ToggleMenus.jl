@@ -1,5 +1,7 @@
 module ToggleMenus
 
+using StringManipulation
+
 export ToggleMenu, ToggleMenuMaker, makemenu
 
 import REPL.TerminalMenus: AbstractMenu, Config, cancel, keypress, move_down!, move_up!,
@@ -57,7 +59,7 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
     for (idx,char) ∈ settings |> enumerate
         icodict[char] = icons[idx]
     end
-    ToggleMenuMaker(settings, icodict, header, pagesize, Config(;kwargs...))
+    ToggleMenuMaker(settings, icodict, header, pagesize, Config(; kwargs...))
 end
 
 
@@ -142,8 +144,11 @@ cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.options))
 numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
-    print(buf, '[', menu.icons[menu.selections[idx]], ']', ' ')
-    body = replace(menu.options[idx], "\n" => "\\n")
+    width = displaysize(stdout)[2]
+    icon = menu.icons[menu.selections[idx]]
+    width -= printable_textwidth(string(icon)) + 6
+    print(buf, '[', icon, ']', ' ')
+    body = fit_string_in_field(replace(menu.options[idx], "\n" => "\\n"), width)
     print(buf, body)
 end
 
@@ -167,11 +172,17 @@ function _prevselection(menu::ToggleMenu)
     end
 end
 
+keyvec = []  # TODO remove
 function keypress(menu::ToggleMenu, i::UInt32)
     char = Char(i)
-    if char == '\t' || char == 'ϩ'
+    push!(keyvec, (i, char))
+    if char == '\e'
+        cancel(menu)
+        return true
+    end
+    if char == '\t' || char == 'ϩ'  # right arrow key
         menu.selections[menu.cursor] =  _nextselection(menu)
-    elseif char == 'Ϩ'
+    elseif char == 'Ϩ' # left arrow key
         menu.selections[menu.cursor] = _prevselection(menu)
     elseif char ∈ menu.settings
         menu.selections[menu.cursor] = char
