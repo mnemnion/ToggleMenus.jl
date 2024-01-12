@@ -10,7 +10,7 @@ using REPL.TerminalMenus
 mutable struct ToggleMenuMaker
     settings::Vector{Char}
     icons::Dict{Char,Char}
-    header::AbstractString
+    header::Union{AbstractString,Function}
     pagesize::Int
     config::Config
     # probably a header template? we'll get there
@@ -18,7 +18,7 @@ end
 
 const StringVector = Vector{S} where S <: AbstractString
 
-function ToggleMenuMaker(header::AbstractString, settings::Vector{Char}, pagesize=10, kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10, kwargs...)
     !allunique(settings) && error("all settings must be unique: $settings")
     icons = Dict{Char,Char}()
     for char in settings
@@ -34,7 +34,8 @@ end
 Create a template for a ToggleMaker, which may be passed to `makemenu` along with a
 set of options.
 
-- `header`: A string, which should inform the user what the options do.
+- `header`: A string, which should inform the user what the options do, or a
+            function `header(m::ToggleMenu)::String`.
 - `settings`: A `Vector{Char}`, every element must be unique, and should be easy to
               type.  Pressing a key corresponding to one of the settings will toggle
               that option directly to that setting.
@@ -46,7 +47,7 @@ set of options.
              aspects of menu presentation and behavior.  For more details consult the
              relevant docstring.
 """
-function ToggleMenuMaker(header::AbstractString, settings::Vector{Char}, icons::Vector{Char}; pagesize=10, kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Vector{Char}; pagesize=10, kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
@@ -73,7 +74,7 @@ mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{Config}
     settings::Vector{Char}
     selections::Vector{Char}
     icons::Dict{Char,Char}
-    header::AbstractString
+    header::Union{AbstractString,Function}
     pagesize::Int
     pageoffset::Int
     cursor::Int
@@ -84,7 +85,7 @@ function ToggleMenu(options::StringVector,
                     settings::Vector{Char},
                     selections::Vector{Char},
                     icons::Dict{Char,Char},
-                    header::AbstractString,
+                    header::Union{AbstractString,Function},
                     config::Config,
                     pagesize=10)
     ToggleMenu(options, settings, selections, icons, header, pagesize, 0, 1, config)
@@ -119,7 +120,11 @@ function ToggleMenu(options::StringVector, maker::ToggleMenuMaker)
 end
 
 function TerminalMenus.header(menu::ToggleMenu)
-    "A Header $(menu.cursor)"
+    if menu.header isa Function
+        menu.header(menu)
+    else
+        menu.header
+    end
 end
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
@@ -137,11 +142,9 @@ cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.options))
 numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
-    if cursor
-        menu.cursor = idx
-    end
     print(buf, '[', menu.icons[menu.selections[idx]], ']', ' ')
-    print(buf, replace(menu.options[idx], "\n" => "\\n"))
+    body = replace(menu.options[idx], "\n" => "\\n")
+    print(buf, body)
 end
 
 function _nextselection(menu::ToggleMenu)
