@@ -11,7 +11,7 @@ using REPL.TerminalMenus
 
 mutable struct ToggleMenuMaker
     settings::Vector{Char}
-    icons::Dict{Char,Char}
+    icons::Dict{Char,Union{String,Char}}
     header::Union{AbstractString,Function}
     pagesize::Int
     config::Config
@@ -22,11 +22,16 @@ const StringVector = Vector{S} where S <: AbstractString
 
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10; kwargs...)
    !allunique(settings) && error("all settings must be unique: $settings")
-   '\0' ∈ settings && error("'\\0' is not a valid setting, add it to initial selections")
-    icons = Dict{Char,Char}()
+    icons = Dict{Char,Union{String,Char}}()
+    iconwidth = reduce(max, map((x) -> printable_textwidth(string(x)), settings))
     for char in settings
-        icons[char] = char
+        if char == '\0'
+            icons[char] = " "^iconwidth
+        else
+            icons[char] = char
+        end
     end
+    settings = [x for x in settings if x != '\0']
     ToggleMenuMaker(settings, icons, header, pagesize, Config(;kwargs...))
 end
 
@@ -56,11 +61,11 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
     end
     !allunique(settings) && error("all settings must be unique: $settings")
     !allunique(icons) && error("all icons must be unique $icons")
-    '\0' ∈ settings && error("'\\0' is not a valid setting, add it to initial selections")
-    icodict = Dict{Char,Char}()
+    icodict = Dict{Char,Union{String,Char}}()
     for (idx,char) ∈ settings |> enumerate
         icodict[char] = icons[idx]
     end
+    settings = [x for x in settings if x != '\0']
     ToggleMenuMaker(settings, icodict, header, pagesize, Config(; kwargs...))
 end
 
@@ -77,6 +82,10 @@ makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, ma
 
 function makemenu(maker::ToggleMenuMaker, options::StringVector, selections::Vector{Char})
     all(==('\0'), selections) && error("At least one selection must not be '\\0'")
+    if '\0' ∈ selections && !haskey(maker.icons, '\0')
+        iconwidth = reduce(max, map((x) -> printable_textwidth(string(x)), values(maker.icons)))
+        maker.icons['\0'] = " "^iconwidth
+    end
     return ToggleMenu(options, selections, maker)
 end
 
@@ -84,7 +93,7 @@ mutable struct ToggleMenu <: TerminalMenus._ConfiguredMenu{Config}
     options::StringVector
     settings::Vector{Char}
     selections::Vector{Char}
-    icons::Dict{Char,Char}
+    icons::Dict{Char,Union{String,Char}}
     header::Union{AbstractString,Function}
     pagesize::Int
     pageoffset::Int
@@ -95,7 +104,7 @@ end
 function ToggleMenu(options::StringVector,
                     settings::Vector{Char},
                     selections::Vector{Char},
-                    icons::Dict{Char,Char},
+                    icons::Dict{Char,Union{String,Char}},
                     header::Union{AbstractString,Function},
                     config::Config,
                     pagesize=10)
@@ -161,18 +170,9 @@ numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
     width = displaysize(stdout)[2]
-    local noicon = menu.selections[idx] == '\0'
-    if noicon
-        icon = "  "
-    else
-        icon = menu.icons[menu.selections[idx]]
-    end
+    icon = menu.icons[menu.selections[idx]]
     width -= printable_textwidth(string(icon)) + 6
-    if !noicon
-        print(buf, '[', icon, ']', ' ')
-    else
-        print(buf, " ", icon, "  ")
-    end
+    print(buf, '[', icon, ']', ' ')
     body = fit_string_in_field(replace(menu.options[idx], "\n" => "\\n"), width)
     print(buf, body)
 end
