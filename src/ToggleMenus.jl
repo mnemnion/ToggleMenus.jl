@@ -2,12 +2,14 @@ module ToggleMenus
 
 using StringManipulation
 
-export ToggleMenu, ToggleMenuMaker, makemenu
+export ToggleMenu, ToggleMenuMaker
 
-import REPL.TerminalMenus: AbstractMenu, _ConfiguredMenu, Config, cancel, keypress, move_down!, move_up!,
-    numoptions, pick, selected, writeline, header
+import REPL.TerminalMenus: AbstractMenu, Config, _ConfiguredMenu, cancel, header, keypress,
+    move_down!, move_up!, numoptions, pick, selected, writeline, request
 
 using REPL.TerminalMenus
+
+import REPL.Terminals: TTYTerminal
 
 mutable struct ToggleMenuMaker
     settings::Vector{Char}
@@ -15,6 +17,7 @@ mutable struct ToggleMenuMaker
     header::Union{AbstractString,Function}
     braces::Tuple{String,String}
     maxicon::Int
+    keypress::Function
     pagesize::Int
     config::Config
 end
@@ -36,7 +39,7 @@ end
 
 
 """
-    ToggleMenuMaker(header, settings, icons, pagesize=10, kwargs...)
+    ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
 
 Create a template for a ToggleMaker, which may be passed to `makemenu` along with a
 set of options.
@@ -46,18 +49,26 @@ set of options.
 - `settings`: A `Vector{Char}`, every element must be unique, and should be easy to
               type.  Pressing a key corresponding to one of the settings will toggle
               that option directly to that setting.
-- `icons`:  Optional `Vector{Char}` or `Vector{String}`.  If provided, these must also
-            be unique, and must have the same number of elements as `settings`.
+- `icons`:  Optional `Vector{Char}` or `Vector{String}`.  If provided, these must
+            also be unique, and must have the same number of elements as `settings`.
             These are used as the selection icons, which will default to `settings`
             if none are provided.
 - `pagesize`:  Number of options to display before scrolling.
 
-The keyword argument used by ToggleMenuMaker is `braces`, which may be a tuple of
-Strings or Chars, this defaults to `("[", "]")`.
+Keyword arguments
 
-Other keyword arguments are passed through to TerminalMenus.Config, and may be used
-to configure aspects of menu presentation and behavior.  For more details consult the
-relevant docstring.
+ - `braces`:  This may be a tuple of Strings or Chars, defaults to `("[", "]")`.
+ - `keypress`:  A second function to run on keypress, only called if the standard
+                inputs aren't handled.  Signature is `(menu::ToggleMenu, i::UInt32)`,
+                where `i` is a somewhat funky representation of the character
+                typed, as provided by [REPL.TerminalMenus](@extref Julia `Menus`).
+                This should return `false` unless the menu is completed, in which
+                case, return `true`.
+
+Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref), and
+may be used to configure aspects of menu presentation and behavior.
+
+The `ToggleMenuMaker` is callable to produce a ToggleMenu.
 """
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
     if length(settings) ≠ length(icons)
@@ -70,31 +81,30 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
         icodict[char] = icons[idx]
     end
     maxicon = reduce(max, map((x) -> printable_textwidth(string(x)), icons))
+    if !haskey(icodict, '\0')
+        icodict['\0'] = " "^maxicon
+    end
     settings = [x for x in settings if x != '\0']
     kwargdict = Dict()
     braces = ("[", "]")
+    onkey(m,i) = false
     for (key, val) in kwargs
         if key == :braces
             braces = (string(val[1]), string(val[2]))
+        elseif key == :keypress
+            onkey = val
         else
             kwargdict[key] = val
         end
     end
-    ToggleMenuMaker(settings, icodict, header, braces, maxicon, pagesize, Config(; kwargdict...))
+    ToggleMenuMaker(settings, icodict, header, braces, maxicon, onkey, pagesize, Config(; kwargdict...))
 end
 
 
 """
-    makemenu(maker::ToggleMenuMaker, options, selections)::ToggleMenu
+    makemenu(maker::ToggleMenuMaker, options [, selections])::ToggleMenu
 
-Makes a `ToggleMenu`.  The `options` are a Vector of some string type, which have
-states which may be toggled through. `selections` is an optional Vector of initial
-selected states for the options.  If a selection is `\0`, the menu will skip that
-line and it will not be togglable.  If not provided, the menu options will begin in
-the first setting.
-
-The menu will return `selections` when the user quits.  If canceled, all values will
-be `\0`, otherwise they will be in the selected state.
+Makes a ToggleMenu.  Usually invoked by calling a [`ToggleMenuMaker`](@ref) with the arguments.
 """
 makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, maker)
 
@@ -111,6 +121,59 @@ function makemenu(maker::ToggleMenuMaker, options::StringVector, selections::Vec
     return ToggleMenu(maker, options, selections)
 end
 
+
+
+"""
+    (maker::ToggleMenuMaker)(options::StringVector)::ToggleMenu
+    (maker::ToggleMenuMaker)(options::StringVector, selections::Vector{Char})::ToggleMenu
+    (maker::ToggleMenuMaker)(opts::Tuple{StringVector,Vector{Char}})::ToggleMenu
+
+Makes a `ToggleMenu`.  The `options` are a Vector of some string type, which have
+states which may be toggled through. `selections` is an optional `Vector{Char}` of
+initial selected states for the options.  If a selection is `\\0`, the menu will skip
+that line during navigation, and it will not be togglable.  If not provided, the menu
+options will begin in the first setting.
+
+When the menu is finished, it will return a `Vector` of `Tuples`, the first of which
+is a selection, the last an option.  This precomposes the options with their
+selections, which is probably what you want, as well as allowing menu functions to
+modify both options and selections.  If canceled, all selections will be `\\0`.
+
+# Use
+
+[`ToggleMenus`](@ref) are inherently designed for use at the [`REPL`](@extref), and
+the type signatures are designed for easy composition.  For example, this works:
+
+```julia
+julia> (["option 1", "option 2"], ['a', 'b']) |> maker |> request
+```
+
+Which is more useful with a function which prepares options and selections. Once that
+function is stable one may use composition:
+
+```julia
+action = request ∘ maker ∘ prepare
+```
+
+Such that `action(data)` will prepare data to be presented in ToggleMenu format, pass
+it to the `maker`, and call `request`.
+
+We also add methods to `request` to make `do` notation possible for all
+`AbstractMenu` types, making this sort of workflow possible:
+
+```julia
+request(menu(options, selections)) do
+    # handle the returned settings here
+end
+```
+"""
+(maker::ToggleMenuMaker)(options::StringVector) = ToggleMenu(maker, options)
+
+(maker::ToggleMenuMaker)(options::StringVector, selections::Vector{Char}) = makemenu(maker, options, selections)
+
+(maker::ToggleMenuMaker)(opts::Tuple{StringVector,Vector{Char}}) = maker(opts[1], opts[2])
+
+
 mutable struct ToggleMenu <: _ConfiguredMenu{Config}
     options::StringVector
     settings::Vector{Char}
@@ -119,10 +182,12 @@ mutable struct ToggleMenu <: _ConfiguredMenu{Config}
     header::Union{AbstractString,Function}
     braces::Tuple{String,String}
     maxicon::Int
+    keypress::Function
     pagesize::Int
     pageoffset::Int
     cursor::Int
     config::Config
+    aux::Any
 end
 
 function ToggleMenu(options::StringVector,
@@ -132,18 +197,19 @@ function ToggleMenu(options::StringVector,
                     header::Union{AbstractString,Function},
                     braces::Tuple{String,String},
                     maxicon::Int,
+                    keypress::Function,
                     config::Config,
                     pagesize=10)
-    ToggleMenu(options, settings, selections, icons, header, braces, maxicon, pagesize, 0, 1, config)
+    ToggleMenu(options, settings, selections, icons, header, braces, maxicon, keypress, pagesize, 0, 1, config, nothing)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector)
     selections = fill(maker.settings[1], length(options))
-    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.maxicon, maker.config, maker.pagesize)
+    ToggleMenu(maker, options, selections)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector, selections::Vector{Char})
-    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.maxicon, maker.config, maker.pagesize)
+    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.maxicon, maker.keypress, maker.config, maker.pagesize)
 end
 
 function header(menu::ToggleMenu)
@@ -190,7 +256,7 @@ end
 
 pick(::ToggleMenu, ::Int)::Bool = true
 
-cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.options))
+cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.selections))
 
 numoptions(menu::ToggleMenu) = length(menu.options)
 
@@ -243,11 +309,27 @@ function keypress(menu::ToggleMenu, i::UInt32)
     elseif char ∈ menu.settings
         menu.selections[menu.cursor] = char
     end
-    return false
+    return menu.keypress(menu, i)
 end
 
 function selected(menu::ToggleMenu)
-    return menu.selections
+    return collect(zip(menu.selections, menu.options))
+end
+
+"""
+    request(λ::Function, args...)
+
+A do-notation-compatible form of [`request`](@extref `REPL.TerminalMenus.request`)
+"""
+request(λ::Function, m::AbstractMenu; kwargs...) = λ(request(m, kwargs...))
+function request(λ::Function, term::TTYTerminal, m::AbstractMenu; kwargs...)
+    λ(request(term, m, kwargs...))
+end
+function request(λ::Function, msg::AbstractString, m::AbstractMenu; kwargs...)
+    λ(request(term, msg, m, kwargs...))
+end
+function request(λ::Function, term::TTYTerminal, msg::AbstractString, m::AbstractMenu; kwargs...)
+    λ(request(term, term, msg, m, kwargs...))
 end
 
 end # module ToggleMenus
