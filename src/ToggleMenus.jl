@@ -306,10 +306,6 @@ end
 
 function keypress(menu::ToggleMenu, i::UInt32)
     char = Char(i)
-    if char == '\e'
-        cancel(menu)
-        return true
-    end
     if char == '\t' || char == 'ϩ'  # right arrow key
         menu.selections[menu.cursor] =  _nextselection(menu)
     elseif char == 'Ϩ' # left arrow key
