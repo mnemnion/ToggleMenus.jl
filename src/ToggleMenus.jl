@@ -39,13 +39,15 @@ end
 
 
 """
-    ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
+    ToggleMenuMaker(header, settings, icons, pagesize=10; kwargs...)
 
-Create a template for a ToggleMaker, which may be passed to `makemenu` along with a
-set of options.
+Create a template with the defining values of a `ToggleMenu`, which may be called
+with further arguments to create one.
 
-- `header`: A string, which should inform the user what the options do, or a function
-            `header(m::ToggleMenu)::String`.
+# Arguments
+
+- `header`: An `AbstractString`, which should inform the user what the options do, or
+            a function `header(m::ToggleMenu)::String`.
 - `settings`: A `Vector{Char}`, every element must be unique, and should be easy to
               type.  Pressing a key corresponding to one of the settings will toggle
               that option directly to that setting.
@@ -55,20 +57,20 @@ set of options.
             if none are provided.
 - `pagesize`:  Number of options to display before scrolling.
 
-Keyword arguments
+# Keyword Arguments
 
  - `braces`:  This may be a tuple of Strings or Chars, defaults to `("[", "]")`.
  - `keypress`:  A second function to run on keypress, only called if the standard
                 inputs aren't handled.  Signature is `(menu::ToggleMenu, i::UInt32)`,
-                where `i` is a somewhat funky representation of the character
-                typed, as provided by [REPL.TerminalMenus](@extref Julia `Menus`).
-                This should return `false` unless the menu is completed, in which
-                case, return `true`.
+                where `i` is a somewhat funky representation of the character typed,
+                as provided by [REPL.TerminalMenus](@extref Julia `Menus`).  This
+                should return `false` unless the menu is completed, in which case,
+                return `true`.
 
 Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref), and
 may be used to configure aspects of menu presentation and behavior.
 
-The `ToggleMenuMaker` is callable to produce a ToggleMenu.
+The `ToggleMenuMaker` is callable to produce a `ToggleMenu`.
 """
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
     if length(settings) ≠ length(icons)
@@ -104,7 +106,9 @@ end
 """
     makemenu(maker::ToggleMenuMaker, options [, selections])::ToggleMenu
 
-Makes a ToggleMenu.  Usually invoked by calling a [`ToggleMenuMaker`](@ref) with the arguments.
+Makes a `ToggleMenu`.
+
+Usually invoked by calling a [`ToggleMenuMaker`](@ref) directly with the arguments.
 """
 makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, maker)
 
@@ -124,15 +128,16 @@ end
 
 
 """
-    (maker::ToggleMenuMaker)(options::StringVector)::ToggleMenu
-    (maker::ToggleMenuMaker)(options::StringVector, selections::Vector{Char})::ToggleMenu
+    (maker::ToggleMenuMaker)(options[, selections])::ToggleMenu
     (maker::ToggleMenuMaker)(opts::Tuple{StringVector,Vector{Char}})::ToggleMenu
 
-Makes a `ToggleMenu`.  The `options` are a Vector of some string type, which have
-states which may be toggled through. `selections` is an optional `Vector{Char}` of
-initial selected states for the options.  If a selection is `\\0`, the menu will skip
-that line during navigation, and it will not be togglable.  If not provided, the menu
-options will begin in the first setting.
+Make a `ToggleMenu`.
+
+The `options` are a Vector of some String type, which have states which may be
+toggled through. `selections` is an optional `Vector{Char}` of initial selected
+states for the options.  If a selection is `\\0`, the menu will skip that line during
+navigation, and it will not be togglable.  If not provided, the menu options will
+begin in the first setting.
 
 When the menu is finished, it will return a `Vector` of `Tuples`, the first of which
 is a selection, the last an option.  This precomposes the options with their
@@ -262,7 +267,8 @@ numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
     width = displaysize(stdout)[2]
-    icon = menu.icons[menu.selections[idx]]
+    icon = get(menu.icons, menu.selections[idx], missing)
+    icon = icon !== missing ? icon : menu.icons['\0']
     if menu.selections[idx] != '\0'
         left, right = menu.braces[1], menu.braces[2]
     else
@@ -279,6 +285,7 @@ end
 function _nextselection(menu::ToggleMenu)
     current = menu.selections[menu.cursor]
     idx = findfirst(==(current), menu.settings)
+    idx === missing && return current
     if idx == length(menu.settings)
         return menu.settings[1]
     else
@@ -289,6 +296,7 @@ end
 function _prevselection(menu::ToggleMenu)
     current = menu.selections[menu.cursor]
     idx = findfirst(==(current), menu.settings)
+    idx === missing && return current
     if idx == 1
         return menu.settings[end]
     else
