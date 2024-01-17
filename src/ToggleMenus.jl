@@ -24,13 +24,10 @@ end
 
 const StringVector = Vector{S} where S <: AbstractString
 
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=10; kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=15; kwargs...)
     icons = Vector{String}()
-    iconwidth = reduce(max, map((x) -> printable_textwidth(string(x)), settings))
     for char in settings
-        if char == '\0'
-            push!(icons, " "^iconwidth)
-        else
+        if char ≠ '\0'
             push!(icons, string(char))
         end
     end
@@ -72,7 +69,7 @@ may be used to configure aspects of menu presentation and behavior.
 
 The `ToggleMenuMaker` is callable to produce a `ToggleMenu`.
 """
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=10; kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=15; kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
