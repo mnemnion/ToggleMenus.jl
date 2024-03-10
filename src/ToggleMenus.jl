@@ -5,7 +5,7 @@ using StringManipulation
 export ToggleMenu, ToggleMenuMaker
 
 import REPL.TerminalMenus: AbstractMenu, Config, _ConfiguredMenu, cancel, header, keypress,
-    move_down!, move_up!, numoptions, pick, selected, writeline, request
+    move_down!, move_up!, numoptions, pick, selected, writeline, request, scroll_wrap
 
 using REPL.TerminalMenus
 
@@ -241,37 +241,50 @@ function header(menu::ToggleMenu)
 end
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    m.cursor[] = invoke(move_up!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
-    selected = m.selections[m.cursor[]]
-    if selected == '\0'
-        if length(m.options) == 1
-            return cursor
+    if cursor > 1
+        cursor -= 1 # move selection up
+        while m.selections[cursor] == '\0' && cursor > 1
+            cursor -= 1
         end
-        if cursor != 1
-            return move_up!(m, cursor - 1, lastoption)
-        else
-            return move_down!(m, cursor, lastoption)
+        if cursor < (2+m.pageoffset) && m.pageoffset > 0
+            m.pageoffset -= 1 # scroll page up
         end
-    else
-        return m.cursor[]
+    elseif scroll_wrap(m)
+        # wrap to bottom
+        cursor = lastoption
+        m.pageoffset = max(0, lastoption - m.pagesize)
+        while m.selections[cursor] == '\0' && cursor > 1
+            cursor -= 1
+        end
     end
+    return cursor
 end
 
 function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    m.cursor[] = invoke(move_down!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
-    selected = m.selections[m.cursor[]]
-    if selected == '\0'
-        if length(m.options) == 1
-            return cursor
+    lastselectable = findlast(c -> c != '\0', m.selections)
+    lastselectable = lastselectable === nothing ? lastoption : lastselectable
+    if cursor < lastselectable
+        cursor += 1 # move selection down
+        while m.selections[cursor] == '\0' && cursor < lastselectable
+            cursor += 1
         end
-        if cursor != lastoption
-            return move_down!(m, cursor + 1, lastoption)
-        else
-            return move_up!(m, cursor, lastoption)
+        pagepos = m.pagesize + m.pageoffset
+        if pagepos <= cursor && pagepos < lastoption
+            m.pageoffset += 1 # scroll page down
         end
-    else
-        return m.cursor[]
+    elseif scroll_wrap(m)
+        # wrap to top
+        cursor = 1
+        m.pageoffset = 0
+        while m.selections[cursor] == '\0' && cursor < lastselectable
+            cursor += 1
+        end
+        pagepos = m.pagesize + m.pageoffset
+        if pagepos <= cursor && pagepos < lastoption
+            m.pageoffset += 1 # scroll page down
+        end
     end
+    return cursor
 end
 
 pick(::ToggleMenu, ::Int)::Bool = true
