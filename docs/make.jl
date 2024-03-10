@@ -1,11 +1,20 @@
 using Documenter
+using DocumenterInterLinks
 using ToggleMenus
+
+links = InterLinks(
+    "Julia" => (
+        "https://docs.julialang.org/en/v1/",
+        joinpath(@__DIR__, "src/inventories", "Julia.toml")
+    ),
+)
 
 makedocs(
     sitename = "ToggleMenus",
     format = Documenter.HTML(),
     modules = [ToggleMenus],
     checkdocs =  :exports,
+    plugins = [links,],
 )
 
 deploydocs(
