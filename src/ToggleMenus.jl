@@ -19,6 +19,7 @@ mutable struct ToggleMenuMaker
     maxicon::Int
     keypress::Function
     pagesize::Int
+    cursor::Ref{Int64}
     config::Config
 end
 
@@ -96,12 +97,12 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
             kwargdict[key] = val
         end
     end
-    ToggleMenuMaker(settings, icodict, header, braces, maxicon, onkey, pagesize, Config(; kwargdict...))
+    ToggleMenuMaker(settings, icodict, header, braces, maxicon, onkey, pagesize, Ref(1), Config(; kwargdict...))
 end
 
 function ToggleMenuMaker(m::ToggleMenuMaker)
     ToggleMenuMaker(m.settings, m.icons, m.header, m.braces,
-                    m.maxicon, m.keypress, m.pagesize, m.config)
+                    m.maxicon, m.keypress, m.pagesize, Ref(1), m.config)
 end
 
 
@@ -169,11 +170,11 @@ action = request ∘ maker ∘ prepare
 Such that `action(data)` will prepare data to be presented in ToggleMenu format, pass
 it to the `maker`, and call `request`.
 
-`ToggleMenus` also adds methods to `request` to make `do` notation possible for all
-`AbstractMenu` types, making this sort of workflow possible:
+`ToggleMenus` also adds methods to `request` to make `do` notation possible for
+`ToggleMenus`, making this sort of workflow possible:
 
 ```julia
-request(menu(options, selections)) do
+request(menu(options, selections)) do return
     # handle the returned settings here
 end
 ```
@@ -187,7 +188,7 @@ end
 function (maker::ToggleMenuMaker)(header::AbstractString, options...)
     _make = ToggleMenuMaker(maker)
     _make.header = header
-    ToggleMenu(_make, options...)
+    makemenu(_make, options...)
 end
 
 mutable struct ToggleMenu <: _ConfiguredMenu{Config}
@@ -216,7 +217,9 @@ function ToggleMenu(options::StringVector,
                     keypress::Function,
                     config::Config,
                     pagesize=10)
-    ToggleMenu(options, settings, selections, icons, header, braces, maxicon, keypress, pagesize, 0, 1, config, nothing)
+    ToggleMenu(options, settings, selections, icons,
+               header, braces, maxicon, keypress, pagesize,
+               0, 1, config, nothing)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector)
@@ -225,7 +228,9 @@ function ToggleMenu(maker::ToggleMenuMaker, options::StringVector)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector, selections::Vector{Char})
-    ToggleMenu(options, maker.settings, selections, maker.icons, maker.header, maker.braces, maker.maxicon, maker.keypress, maker.config, maker.pagesize)
+    ToggleMenu(options, maker.settings, selections, maker.icons,
+               maker.header, maker.braces, maker.maxicon, maker.keypress,
+               maker.config, maker.pagesize)
 end
 
 function header(menu::ToggleMenu)
@@ -336,14 +341,14 @@ end
 
 A do-notation-compatible form of [`request`](@extref `REPL.TerminalMenus.request`).
 """
-request(λ::Function, m::AbstractMenu; kwargs...) = λ(request(m, kwargs...))
-function request(λ::Function, term::TTYTerminal, m::AbstractMenu; kwargs...)
+request(λ::Function, m::ToggleMenu; kwargs...) = λ(request(m, kwargs...))
+function request(λ::Function, term::TTYTerminal, m::ToggleMenu; kwargs...)
     λ(request(term, m, kwargs...))
 end
-function request(λ::Function, msg::AbstractString, m::AbstractMenu; kwargs...)
+function request(λ::Function, msg::AbstractString, m::ToggleMenu; kwargs...)
     λ(request(term, msg, m, kwargs...))
 end
-function request(λ::Function, term::TTYTerminal, msg::AbstractString, m::AbstractMenu; kwargs...)
+function request(λ::Function, term::TTYTerminal, msg::AbstractString, m::ToggleMenu; kwargs...)
     λ(request(term, term, msg, m, kwargs...))
 end
 
