@@ -19,7 +19,6 @@ mutable struct ToggleMenuMaker
     maxicon::Int
     keypress::Function
     pagesize::Int
-    cursor::Ref{Int64}
     config::Config
 end
 
@@ -97,12 +96,12 @@ function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vecto
             kwargdict[key] = val
         end
     end
-    ToggleMenuMaker(settings, icodict, header, braces, maxicon, onkey, pagesize, Ref(1), Config(; kwargdict...))
+    ToggleMenuMaker(settings, icodict, header, braces, maxicon, onkey, pagesize, Config(; kwargdict...))
 end
 
 function ToggleMenuMaker(m::ToggleMenuMaker)
     ToggleMenuMaker(m.settings, m.icons, m.header, m.braces,
-                    m.maxicon, m.keypress, m.pagesize, Ref(1), m.config)
+                    m.maxicon, m.keypress, m.pagesize, m.config)
 end
 
 
@@ -202,7 +201,7 @@ mutable struct ToggleMenu <: _ConfiguredMenu{Config}
     keypress::Function
     pagesize::Int
     pageoffset::Int
-    cursor::Int
+    cursor::Ref{Int}
     config::Config
     aux::Any
 end
@@ -219,7 +218,7 @@ function ToggleMenu(options::StringVector,
                     pagesize=10)
     ToggleMenu(options, settings, selections, icons,
                header, braces, maxicon, keypress, pagesize,
-               0, 1, config, nothing)
+               0, Ref(1), config, nothing)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector)
@@ -242,8 +241,8 @@ function header(menu::ToggleMenu)
 end
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    m.cursor = invoke(move_up!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
-    selected = m.selections[m.cursor]
+    m.cursor[] = invoke(move_up!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+    selected = m.selections[m.cursor[]]
     if selected == '\0'
         if length(m.options) == 1
             return cursor
@@ -254,13 +253,13 @@ function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
             return move_down!(m, cursor, lastoption)
         end
     else
-        return m.cursor
+        return m.cursor[]
     end
 end
 
 function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    m.cursor = invoke(move_down!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
-    selected = m.selections[m.cursor]
+    m.cursor[] = invoke(move_down!, Tuple{AbstractMenu,Int,Int}, m, cursor, lastoption)
+    selected = m.selections[m.cursor[]]
     if selected == '\0'
         if length(m.options) == 1
             return cursor
@@ -271,7 +270,7 @@ function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
             return move_up!(m, cursor, lastoption)
         end
     else
-        return m.cursor
+        return m.cursor[]
     end
 end
 
@@ -299,7 +298,7 @@ function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
 end
 
 function _nextselection(menu::ToggleMenu)
-    current = menu.selections[menu.cursor]
+    current = menu.selections[menu.cursor[]]
     idx = findfirst(==(current), menu.settings)
     idx === missing && return current
     if idx == length(menu.settings)
@@ -310,7 +309,7 @@ function _nextselection(menu::ToggleMenu)
 end
 
 function _prevselection(menu::ToggleMenu)
-    current = menu.selections[menu.cursor]
+    current = menu.selections[menu.cursor[]]
     idx = findfirst(==(current), menu.settings)
     idx === missing && return current
     if idx == 1
@@ -323,17 +322,41 @@ end
 function keypress(menu::ToggleMenu, i::UInt32)
     char = Char(i)
     if char == '\t' || char == 'ϩ'  # right arrow key
-        menu.selections[menu.cursor] =  _nextselection(menu)
+        menu.selections[menu.cursor[]] =  _nextselection(menu)
     elseif char == 'Ϩ' # left arrow key
-        menu.selections[menu.cursor] = _prevselection(menu)
+        menu.selections[menu.cursor[]] = _prevselection(menu)
     elseif char ∈ menu.settings
-        menu.selections[menu.cursor] = char
+        menu.selections[menu.cursor[]] = char
     end
     return menu.keypress(menu, i)
 end
 
 function selected(menu::ToggleMenu)
     return collect(zip(menu.selections, menu.options))
+end
+
+"""
+    request(m::ToggleMenu; kwargs...)
+
+All [`REPL.TerminalMenus`](@extref `REPL.TerminalMenus`) methods for [`request`](@extref `REPL.TerminalMenus.request`)
+are overloaded to provide `m.cursor` as a keyword argument.  This value is used internally
+in a way which presumes that the Ref will be the same one seen by the runtime, as such, it
+is passed after `kwargs...`, such that overloading it will have no effect.
+"""
+function request(m::ToggleMenu; kwargs...)
+    invoke(request, Tuple{AbstractMenu}, m; kwargs..., cursor=m.cursor)
+end
+
+function request(tty::TTYTerminal, m::ToggleMenu; kwargs...)
+    invoke(request, Tuple{TTYTerminal,AbstractMenu}, tty, m; kwargs..., cursor=m.cursor)
+end
+
+function request(msg::AbstractString, m::ToggleMenu; kwargs...)
+    invoke(request, Tupe{AbstractString,AbstractMenu}, msg, m; kwargs..., cursor=m.cursor)
+end
+
+function request(tty::TTYTerminal, msg::AbstractString, m::ToggleMenu; kwargs...)
+    invoke(request, Tuple{TTYTerminal,AbstractString,AbstractMenu}, tty, msg, m; kwargs..., cursor=m.cursor)
 end
 
 """
