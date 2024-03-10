@@ -1,15 +1,11 @@
 module ToggleMenus
 
-using StringManipulation
-
 export ToggleMenu, ToggleMenuMaker
-
 import REPL.TerminalMenus: AbstractMenu, Config, _ConfiguredMenu, cancel, header, keypress,
-    move_down!, move_up!, numoptions, pick, selected, writeline, request, scroll_wrap
-
-using REPL.TerminalMenus
-
+    move_down!, move_up!, numoptions, pick, printmenu, request, scroll_wrap, selected,
+    writeline
 import REPL.Terminals: TTYTerminal
+import StringManipulation: fit_string_in_field, printable_textwidth
 
 mutable struct ToggleMenuMaker
     settings::Vector{Char}
@@ -60,12 +56,13 @@ with further arguments to create one.
  - `keypress`:  A second function to run on keypress, only called if the standard
                 inputs aren't handled.  Signature is `(menu::ToggleMenu, i::UInt32)`,
                 where `i` is a somewhat funky representation of the character typed,
-                as provided by [REPL.TerminalMenus](@extref Julia `Menus`).  This
+                as provided by [REPL.TerminalMenus](@extref `Menus`).  This
                 should return `false` unless the menu is completed, in which case,
                 return `true`.
 
-Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref), and
-may be used to configure aspects of menu presentation and behavior.
+Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref
+`REPL.TerminalMenus.config`), and may be used to configure aspects of menu presentation
+and behavior.
 
 The `ToggleMenuMaker` is callable to produce a `ToggleMenu`.
 """
@@ -152,8 +149,9 @@ modify both options and selections.  If canceled, all selections will be `\\0`.
 
 # Use
 
-[`ToggleMenus`](@ref) are inherently designed for use at the [`REPL`](@extref), and
-the type signatures are designed for easy composition.  For example, this works:
+[`ToggleMenu`](@ref)s are inherently designed for use at the [`REPL`](@extref
+`stdlib/REPL`), and the type signatures are designed for easy composition.  For
+example, this works:
 
 ```julia
 julia> (["option 1", "option 2"], ['a', 'b']) |> maker |> request
@@ -190,6 +188,9 @@ function (maker::ToggleMenuMaker)(header::AbstractString, options...)
     makemenu(_make, options...)
 end
 
+"""
+    Le Stub Toggl'Menu
+"""
 mutable struct ToggleMenu <: _ConfiguredMenu{Config}
     options::StringVector
     settings::Vector{Char}
@@ -351,7 +352,7 @@ end
 """
     request(m::ToggleMenu; kwargs...)
 
-All [`REPL.TerminalMenus`](@extref `REPL.TerminalMenus`) methods for [`request`](@extref `REPL.TerminalMenus.request`)
+All [`REPL.TerminalMenus`](@extref Menus) methods for [`request`](@extref `REPL.TerminalMenus.request`)
 are overloaded to provide `m.cursor` as a keyword argument.  This value is used internally
 in a way which presumes that the Ref will be the same one seen by the runtime, as such, it
 is passed after `kwargs...`, such that overloading it will have no effect.
@@ -386,6 +387,14 @@ function request(λ::Function, msg::AbstractString, m::ToggleMenu; kwargs...)
 end
 function request(λ::Function, term::TTYTerminal, msg::AbstractString, m::ToggleMenu; kwargs...)
     λ(request(term, term, msg, m, kwargs...))
+end
+
+function Base.show(io::IO, ::MIME"text/plain", m::ToggleMenu)
+    buf = IOBuffer()
+    printmenu(buf, m, m.cursor[])
+    str = String(take!(buf))
+    str = replace(str, r"\r\e\[\d+A\e\[2K" => "")
+    print(io, str)
 end
 
 end # module ToggleMenus
