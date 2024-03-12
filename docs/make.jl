@@ -15,6 +15,10 @@ makedocs(
     modules = [ToggleMenus],
     checkdocs =  :exports,
     plugins = [links,],
+    pages = [
+        "ToggleMenus" => "index.md",
+        "Docstrings" => "docstrings.md",
+    ],
 )
 
 deploydocs(
