@@ -34,7 +34,7 @@ end
 
 
 """
-    ToggleMenuMaker(header, settings, icons, pagesize=10; kwargs...)
+    ToggleMenuMaker(header, settings, icons, pagesize=15; kwargs...)
 
 Create a template with the defining values of a `ToggleMenu`, which may be called
 with further arguments to create one.
@@ -184,7 +184,7 @@ end
 
 (maker::ToggleMenuMaker)(options::StringVector, selections::Vector{Char}) = makemenu(maker, options, selections)
 
-(maker::ToggleMenuMaker)(opts::Tuple{StringVector,Vector{Char}}) = maker(opts[1], opts[2])
+(maker::ToggleMenuMaker)(opts::Tuple) = maker(opts...)
 
 function (maker::ToggleMenuMaker)(header::AbstractString, options...)
     _make = ToggleMenuMaker(maker)
@@ -193,7 +193,21 @@ function (maker::ToggleMenuMaker)(header::AbstractString, options...)
 end
 
 """
-    Le Stub Toggl'Menu
+    mutable struct ToggleMenu <: _ConfiguredMenu{Config}
+        options::StringVector
+        settings::Vector{Char}
+        selections::Vector{Char}
+        icons::Dict{Char,Union{String,Char}}
+        header::Union{AbstractString,Function}
+        braces::Tuple{String,String}
+        maxicon::Int
+        keypress::Function
+        pagesize::Int
+        pageoffset::Int
+        cursor::Ref{Int}
+        config::Config
+        aux::Any
+    end
 """
 mutable struct ToggleMenu <: _ConfiguredMenu{Config}
     options::StringVector
