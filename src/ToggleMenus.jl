@@ -2,7 +2,7 @@ module ToggleMenus
 
 export ToggleMenu, ToggleMenuMaker
 import REPL.TerminalMenus: AbstractMenu, Config, _ConfiguredMenu, cancel, header, keypress,
-    move_down!, move_up!, numoptions, pick, printmenu, request, scroll_wrap, selected,
+    move_down!, move_up!, page_up!, page_down!, numoptions, pick, printmenu, request, scroll_wrap, selected,
     writeline
 import REPL.Terminals: TTYTerminal
 import StringManipulation: fit_string_in_field, printable_textwidth
@@ -20,11 +20,13 @@ end
 
 const StringVector = Vector{S} where S <: AbstractString
 
-function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize=15; kwargs...)
+function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, pagesize::Int=15; kwargs...)
     icons = Vector{String}()
     for char in settings
         if char ≠ '\0'
             push!(icons, string(char))
+        else  # this can be wrong, but... if you have wide-char settings,
+            push!(icons, " ")  # rethink your life choices.  Or provide icons. FFS.
         end
     end
     ToggleMenuMaker(header, settings, icons, pagesize; kwargs...)
@@ -64,14 +66,14 @@ Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref
 `REPL.TerminalMenus.config`), and may be used to configure aspects of menu presentation
 and behavior.
 
-The `ToggleMenuMaker` is callable to produce a `ToggleMenu`.
+The `ToggleMenuMaker` is callable to produce a [`ToggleMenu`](@ref).
 """
 function ToggleMenuMaker(header::Union{AbstractString,Function}, settings::Vector{Char}, icons::Union{Vector{String},Vector{Char}}, pagesize=15; kwargs...)
     if length(settings) ≠ length(icons)
         throw(DimensionMismatch("settings and icons must have the same number of elements"))
     end
-    !allunique(settings) && error("all settings must be unique: $settings")
-    !allunique(icons) && error("all icons must be unique $icons")
+    !allunique(settings) && throw(ArgumentError("all settings must be unique: $settings"))
+    !allunique(icons) && throw(ArgumentError("all icons must be unique $icons"))
     icodict = Dict{Char,Union{String,Char}}()
     for (idx, char) ∈ settings |> enumerate
         icodict[char] = icons[idx]
@@ -107,7 +109,8 @@ end
 
 Makes a `ToggleMenu`.
 
-Usually invoked by calling a [`ToggleMenuMaker`](@ref) directly with the arguments.
+This is not exported, and is subject to change without notice, you should invoke it by
+calling [`ToggleMenuMaker`](@ref).
 """
 makemenu(maker::ToggleMenuMaker, options::StringVector) = ToggleMenu(options, maker)
 
@@ -115,13 +118,14 @@ function makemenu(maker::ToggleMenuMaker, options::StringVector, selections::Vec
     all(==('\0'), selections) && error("At least one selection must not be '\\0'")
     for select in selections
         if !haskey(maker.icons, select)
-            error("Invalid selection $select")
+            throw(ArgumentError("Invalid selection $select at [$(find(select, selections))]"))
         end
     end
     if '\0' ∈ selections && !haskey(maker.icons, '\0')
         maker.icons['\0'] = " "^maker.maxicon
     end
-    return ToggleMenu(maker, options, selections)
+    cursor = findfirst(c -> c != '\0', selections)
+    return ToggleMenu(maker, options, selections, cursor)
 end
 
 
@@ -171,7 +175,7 @@ it to the `maker`, and call `request`.
 `ToggleMenus`, making this sort of workflow possible:
 
 ```julia
-request(menu(options, selections)) do return
+request(menu(options, selections)) do selected
     # handle the returned settings here
 end
 ```
@@ -216,21 +220,26 @@ function ToggleMenu(options::StringVector,
                     maxicon::Int,
                     keypress::Function,
                     config::Config,
-                    pagesize=10)
+                    cursor::Int=1,
+                    pagesize=15)
     ToggleMenu(options, settings, selections, icons,
                header, braces, maxicon, keypress, pagesize,
-               0, Ref(1), config, nothing)
+               0, Ref(cursor), config, nothing)
 end
 
 function ToggleMenu(maker::ToggleMenuMaker, options::StringVector)
     selections = fill(maker.settings[1], length(options))
-    ToggleMenu(maker, options, selections)
+    cursor = findfirst(c -> c != '\0', selections)
+    ToggleMenu(maker, options, selections, cursor)
 end
 
-function ToggleMenu(maker::ToggleMenuMaker, options::StringVector, selections::Vector{Char})
+function ToggleMenu(maker::ToggleMenuMaker,
+                    options::StringVector,
+                    selections::Vector{Char},
+                    cursor=Int)
     ToggleMenu(options, maker.settings, selections, maker.icons,
                maker.header, maker.braces, maker.maxicon, maker.keypress,
-               maker.config, maker.pagesize)
+               maker.config, cursor, maker.pagesize)
 end
 
 function header(menu::ToggleMenu)
@@ -247,7 +256,7 @@ function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
         while m.selections[cursor] == '\0' && cursor > 1
             cursor -= 1
         end
-        if cursor < (2+m.pageoffset) && m.pageoffset > 0
+        while cursor < (2+m.pageoffset) && m.pageoffset > 0
             m.pageoffset -= 1 # scroll page up
         end
     elseif scroll_wrap(m)
@@ -257,6 +266,13 @@ function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
         while m.selections[cursor] == '\0' && cursor > 1
             cursor -= 1
         end
+    end
+    # Final attempt to get away from '\0'
+    if m.selections[cursor] == '\0'
+        a_valid_cursor = findfirst(c -> c != '\0', m.selections)
+        if a_valid_cursor !== nothing
+            cursor = a_valid_cursor
+        end  # otherwise we may as well stay put
     end
     return cursor
 end
@@ -269,8 +285,8 @@ function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
         while m.selections[cursor] == '\0' && cursor < lastselectable
             cursor += 1
         end
-        pagepos = m.pagesize + m.pageoffset
-        if pagepos <= cursor && pagepos < lastoption
+        while m.pagesize + m.pageoffset <= cursor &&
+              m.pagesize + m.pageoffset < lastoption
             m.pageoffset += 1 # scroll page down
         end
     elseif scroll_wrap(m)
@@ -285,7 +301,40 @@ function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
             m.pageoffset += 1 # scroll page down
         end
     end
+    # Final attempt to get away from '\0'
+    if m.selections[cursor] == '\0'
+        a_valid_cursor = findlast(c -> c != '\0', m.selections)
+        if a_valid_cursor !== nothing
+            cursor = a_valid_cursor
+        end  # otherwise we may as well stay put
+    end
     return cursor
+end
+
+function page_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
+    # If we're at the bottom, move the page 1 less to move the cursor up from
+    # the bottom entry, since we try to avoid putting the cursor at bounds.
+    m.header = "page up!"
+    m.pageoffset -= m.pagesize - (cursor == lastoption ? 1 : 0)
+    m.pageoffset = max(m.pageoffset, 0)
+    newcursor = max(cursor - m.pagesize, 1)
+    if m.selections[newcursor] == '\0'
+        return move_up!(m, newcursor, lastoption)
+    else
+        return newcursor
+    end
+end
+
+function page_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
+    m.header = "page down!"
+    m.pageoffset += m.pagesize - (cursor == 1 ? 1 : 0)
+    m.pageoffset = max(0, min(m.pageoffset, lastoption - m.pagesize))
+    newcursor =  min(cursor + m.pagesize, lastoption)
+    if m.selections[newcursor] == '\0'
+        return move_down!(m, newcursor, lastoption)
+    else
+        return newcursor
+    end
 end
 
 pick(::ToggleMenu, ::Int)::Bool = true
@@ -294,7 +343,7 @@ cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.selections))
 
 numoptions(menu::ToggleMenu) = length(menu.options)
 
-function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, cursor::Bool)
+function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, ::Bool)
     width = displaysize(stdout)[2]
     icon = get(menu.icons, menu.selections[idx], missing)
     icon = icon !== missing ? icon : menu.icons['\0']
@@ -345,17 +394,19 @@ function keypress(menu::ToggleMenu, i::UInt32)
     return menu.keypress(menu, i)
 end
 
+
 function selected(menu::ToggleMenu)
     return collect(zip(menu.selections, menu.options))
 end
 
 """
-    request(m::ToggleMenu; kwargs...)
+    request(m::ToggleMenu; kwargs..., cursor=m.cursor)
 
-All [`REPL.TerminalMenus`](@extref Menus) methods for [`request`](@extref `REPL.TerminalMenus.request`)
-are overloaded to provide `m.cursor` as a keyword argument.  This value is used internally
-in a way which presumes that the Ref will be the same one seen by the runtime, as such, it
-is passed after `kwargs...`, such that overloading it will have no effect.
+All [`REPL.AbstractMenu`](@extref Menus) methods for [`request`](@extref
+`REPL.TerminalMenus.request`) are overloaded for `ToggleMenu`, to provide `m.cursor`
+as a keyword argument.  This value is used internally in a way which presumes that
+the Ref will be the same one seen by the runtime, as such, it is passed after
+`kwargs...`, meaning that overloading it will have no effect.
 """
 function request(m::ToggleMenu; kwargs...)
     invoke(request, Tuple{AbstractMenu}, m; kwargs..., cursor=m.cursor)
