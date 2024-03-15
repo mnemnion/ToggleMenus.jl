@@ -27,7 +27,8 @@ request(menu) = menu  # it's how the sausage is made
 
 ## Using ToggleMenu
 
-Like any other TerminalMenu, a ToggleMenu is launched with `request`.
+Like any other TerminalMenu, a ToggleMenu is launched with [`request`](@extref
+`REPL.TerminalMenus.request`).
 
 ```@repl tgm1
 request(menu)
@@ -88,7 +89,7 @@ is useful for interactively writing code to put the menu into the desired initia
 state.
 
 Note that `charset=:unicode` is one of the [configurations](@extref
-`REPL.TerminalMenus.config`) for `TerminalMenus`. Any such keyword arguments are passed
+`REPL.TerminalMenus.Config`) for `TerminalMenus`. Any such keyword arguments are passed
 through to `TerminalMenus`, except for `ToggleMenu`-specific ones, and `cursor`, which
 we override. Custom configurations are always passed to the `ToggleMenuMaker`, not to
 the menu itself.
@@ -109,6 +110,13 @@ the `.cursor` field, which is provided to the `TerminalMenus` code as a keyword 
 overloaded methods of [`request`](@extref `REPL.TerminalMenus.request`) defined for
 toggle menus. This allows user functions to change the cursor line directly, in a way
 which the menu code understands.
+
+In the case where the header of the menu should be custom to each menu, pass that first:
+
+```@example tgm2
+otherheader = "A different header, select [a], [b], [c]"
+template(otherheader, options, selections)
+```
 
 ### Settings and Icons
 

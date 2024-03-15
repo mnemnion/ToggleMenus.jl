@@ -74,7 +74,7 @@ with further arguments to create one.
                 return `true`.
 
 Other keyword arguments are passed through to [`TerminalMenus.Config`](@extref
-`REPL.TerminalMenus.config`), and may be used to configure aspects of menu presentation
+`REPL.TerminalMenus.Config`), and may be used to configure aspects of menu presentation
 and behavior.
 
 The `ToggleMenuMaker` is callable to produce a [`ToggleMenu`](@ref).
