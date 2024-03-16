@@ -58,7 +58,7 @@ cover how to create them, and how to work with the results.
 
 While it's possible to create a [`ToggleMenu`](@ref) directly, by calling the
 constructor, this is not the intended workflow.  Toggle menus have more setup
-associated with them then the usual sort of [`TerminalMenu`](@extref `Menus`),
+associated with them than the usual sort of [`TerminalMenu`](@extref `Menus`),
 and it's often the case that one will want to use one sort of menu to present
 many menus with different data.
 
@@ -118,7 +118,9 @@ otherheader = "A different header, select [a], [b], [c]"
 template(otherheader, options, selections)
 ```
 
-### Settings and Icons
+The header can also be a [user function](#User-Functions), see below.
+
+## Settings and Icons
 
 Settings provide the possible states for any menu option. They have to be a
 `Vector{Char}`, and really should be characters which are easy to type on a
@@ -185,7 +187,7 @@ the correct value.
 When a menu is provided with initial selections, the ToggleMenuMaker will check that
 those selections are valid, and throw an error if they aren't.
 
-#### The '\0' Special Case
+### The '\0' Special Case
 
 Sometimes it's useful to have lines in the menu which aren't associated with states.
 This is necessary to have multiple lines, because the option printer will replace all
@@ -204,7 +206,8 @@ To make an option un-togglable, set the desired lines to `'\0'` in the selection
 passed in to the menu.  You only need to include it in the `settings` if you want an
 icon which isn't just enough spaces to pad alignment correctly.  Note that if you do
 provide such an icon, it will not be wrapped in braces (`[` and `]` by default, but
-this is configurable, see below).
+this is configurable, see below), so such lines will be visually distinguishable from
+selectable ones.
 
 In the following example, the `7` passed to `ToggleMenuMaker` is the pagesize,
 controlling how many menu items are displayed.  This defaults to `15`.
@@ -241,7 +244,7 @@ trying to find a valid line to rest the cursor on.
 your first or last lines aren't togglable, the cursor will still point at them. Any
 further navigation will return the cursor to a usable line, however.
 
-### Return Values
+## Return Values
 
 The TerminalMenus interface has two distinct types of return: these are called
 [`cancel`](@extref `REPL.TerminalMenus.cancel`) and [`pick`] (@extref
@@ -252,14 +255,11 @@ what you get from pressing `[Enter]`.  Either form of exit then calls
 In either circumstance, ToogleMenus will return a Vector of Tuples, where `[1]` is
 the selection, and `[2]` is the option it corresponds to.  We do this, rather than
 merely returning the selections, so that user functions can rearrange and delete
-lines.  If canceled, all the the selections will be `'\0'`, note that this
-will happen whether or not `'\0'` was used to indicate blank lines.  A menu with
-everything selected to `'\0'` isn't navigable, though ToggleMenus can handle this
-condition without throwing errors, but the ToggleMenuMaker will refuse to make a menu
-in this state.  So barring deliberate action from user functions, a
-[`cancel`](@extref `REPL.TerminalMenus.cancel`) result will always be distinguishable
-from a [`pick`] (@extref `REPL.TerminalMenus.pick`) result, by all selections being the
-Char `'\0'`.
+lines.  If canceled, this Vector will be exactly `['\0', ""]`.  This makes it
+convenient to write code which iterates over the results and does things with states
+which aren't `'\0'`, since in the event of a cancel, such code will do nothing.  If
+you wish to specifically detect the return condition, import [didcancelmenu](@ref
+ToggleMenus.didcancelmenu) from `ToggleMenus` and call it on the result.
 
 ## User Functions
 
@@ -267,9 +267,8 @@ To customize the behavior of the menus, a ToggleMenuMaker may be configured with
 either or both user functions.  The header, passed first to the menu maker, is
 normally a [`String`](@extref `manual/strings`), but may also be a function.  This
 function will receive the menu as its only argument, and must return a string, which
-is then printed as a header.  This will be called any time a keystroke is entered.
-A header function executes before the menu is printed, so any change made by a keystroke
-will be visible when a header function is called.
+is then printed as a header.  This will be called any time a keystroke is entered,
+after the keystroke, and before the menu is printed.
 
 The other optional user function is `keypress`.  The `TerminalMenus` code handles
 `[Up]` and `[Down]`, `[PgUp]` and `[PgDown]`, `[Home]` and `[End]`, `[q]`, and
