@@ -12,6 +12,7 @@ REPL.
 module ToggleMenus
 
 export ToggleMenu, ToggleMenuMaker
+
 import REPL.TerminalMenus: AbstractMenu, Config, _ConfiguredMenu, cancel, header, keypress,
     move_down!, move_up!, page_up!, page_down!, numoptions, pick, printmenu, request, scroll_wrap, selected,
     writeline
@@ -140,7 +141,6 @@ function makemenu(maker::ToggleMenuMaker, options::StringVector, selections::Vec
 end
 
 
-
 """
     (maker::ToggleMenuMaker)(options[, selections])::ToggleMenu
     (maker::ToggleMenuMaker)(opts::Tuple{StringVector,Vector{Char}})::ToggleMenu
@@ -200,7 +200,7 @@ end
 function (maker::ToggleMenuMaker)(header::AbstractString, options...)
     _make = ToggleMenuMaker(maker)
     _make.header = header
-    makemenu(_make, options...)
+    _make(options...)
 end
 
 """
@@ -267,6 +267,18 @@ function ToggleMenu(maker::ToggleMenuMaker,
                maker.config, cursor, maker.pagesize)
 end
 
+"""
+    didcancelmenu(result::Vector{Tuple{Char,String}})::Bool
+
+Called on the **result** returned from a `ToggleMenu`, this will return
+`true` if the results comes from menu having been cancelled.
+"""
+function didcancelmenu(result::Vector{Tuple{Char,String}})::Bool
+    length(result) == 1 && result[1][1] == '\0' && result[1][2] == ""
+end
+
+# AbstractMenu interface
+
 function header(menu::ToggleMenu)
     if menu.header isa Function
         menu.header(menu)
@@ -274,6 +286,16 @@ function header(menu::ToggleMenu)
         menu.header
     end
 end
+
+pick(::ToggleMenu, ::Int)::Bool = true
+
+function cancel(menu::ToggleMenu)
+    menu.selections = ['\0']
+    menu.options = [""]
+    return
+end
+
+numoptions(menu::ToggleMenu) = length(menu.options)
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
     if cursor > 1
@@ -339,7 +361,6 @@ end
 function page_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
     # If we're at the bottom, move the page 1 less to move the cursor up from
     # the bottom entry, since we try to avoid putting the cursor at bounds.
-    m.header = "page up!"
     m.pageoffset -= m.pagesize - (cursor == lastoption ? 1 : 0)
     m.pageoffset = max(m.pageoffset, 0)
     newcursor = max(cursor - m.pagesize, 1)
@@ -351,7 +372,6 @@ function page_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
 end
 
 function page_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    m.header = "page down!"
     m.pageoffset += m.pagesize - (cursor == 1 ? 1 : 0)
     m.pageoffset = max(0, min(m.pageoffset, lastoption - m.pagesize))
     newcursor =  min(cursor + m.pagesize, lastoption)
@@ -361,12 +381,6 @@ function page_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
         return newcursor
     end
 end
-
-pick(::ToggleMenu, ::Int)::Bool = true
-
-cancel(menu::ToggleMenu) = menu.selections = fill('\0', length(menu.selections))
-
-numoptions(menu::ToggleMenu) = length(menu.options)
 
 function writeline(buf::IOBuffer, menu::ToggleMenu, idx::Int, ::Bool)
     width = displaysize(stdout)[2]
