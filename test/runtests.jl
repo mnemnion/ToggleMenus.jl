@@ -98,6 +98,8 @@ page_up!, pick, printmenu, scroll_wrap, selected, writeline, didcancelmenu
         @test (menu.cursor[] = page_up!(menu, menu.cursor[])) == 1
         menu.selections[3] = 'b'
         @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 3
+        @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 3
+        @test (menu.cursor[] = move_down!(menu, menu.cursor[])) == 3
     end
 
     @testset "User Functions" begin

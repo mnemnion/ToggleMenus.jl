@@ -302,7 +302,9 @@ end
 numoptions(menu::ToggleMenu) = length(menu.options)
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
-    if cursor > 1
+    firstselectable = findfirst(c -> c != '\0', m.selections)
+    firstselectable = firstselectable === nothing ? 1 : firstselectable
+    if cursor > firstselectable
         cursor -= 1 # move selection up
         while m.selections[cursor] == '\0' && cursor > 1
             cursor -= 1
@@ -311,7 +313,7 @@ function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
             m.pageoffset -= 1 # scroll page up
         end
     end
-    if cursor == 1 && scroll_wrap(m)
+    if m.cursor[] ≤ firstselectable && scroll_wrap(m)
         # wrap to bottom
         cursor = lastoption
         m.pageoffset = max(0, lastoption - m.pagesize)
