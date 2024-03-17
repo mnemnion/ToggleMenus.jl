@@ -90,8 +90,8 @@ state.
 
 Note that `charset=:unicode` is one of the [configurations](@extref
 `REPL.TerminalMenus.Config`) for `TerminalMenus`. Any such keyword arguments are passed
-through to `TerminalMenus`, except for `ToggleMenu`-specific ones, and `cursor`, which
-we override. Custom configurations are always passed to the `ToggleMenuMaker`, not to
+through to `TerminalMenus`, except for `ToggleMenu`-specific ones. Custom
+configurations are always passed to the `ToggleMenuMaker`, not to
 the menu itself.
 
 You may notice that all of the options are in the initial setting, this is the default
@@ -128,7 +128,7 @@ keyboard.  Settings may be toggled through with tab, or cycled with the left and
 right arrow keys, but also set directly by pressing the key which sends that
 character.
 
-Icons are optional, the ToggleMenu will use the settings directly if they aren't
+Icons are optional, the `ToggleMenu` will use the settings directly if they aren't
 provided.
 
 ```@example tgm2
@@ -136,11 +136,11 @@ template2 = ToggleMenuMaker(header, settings)
 menu3 = template2(options, selections)
 ```
 
-When provided, they can be a Vector of Strings or Chars, but not a mix. Converting a
-mixed Vector of Char and String to a `Vector{String}` is easy: `[string(c) for c in vec]`
-will do the trick.
+When provided, they can be a `Vector` of `String`s or `Char`s, but not a mix. Converting a
+mixed `Vector` of `Char` and `String` to a `Vector{String}` is easy: `[string(c) for
+c in vec]` will do the trick.
 
-ToggleMenus will handle spacing if icons are of different lengths:
+`ToggleMenus` will handle spacing if icons are of different lengths:
 
 ```@example tgm3
 using ToggleMenus  # hide
@@ -184,7 +184,7 @@ julia> textwidth("🫶🏼")
 For icons, this can be compensated for, if necessary, by setting `menumaker.maxicon` to
 the correct value.
 
-When a menu is provided with initial selections, the ToggleMenuMaker will check that
+When a menu is provided with initial selections, the `ToggleMenuMaker` will check that
 those selections are valid, and throw an error if they aren't.
 
 ### The '\0' Special Case
@@ -252,10 +252,10 @@ The TerminalMenus interface has two distinct types of return: these are called
 what you get from pressing `[Enter]`.  Either form of exit then calls
 [`selected`](@extref `REPL.TerminalMenus.selected`), which prepares the return values.
 
-In either circumstance, ToogleMenus will return a Vector of Tuples, where `[1]` is
+In either circumstance, `ToogleMenus` will return a `Vector` of `Tuples`, where `[1]` is
 the selection, and `[2]` is the option it corresponds to.  We do this, rather than
 merely returning the selections, so that user functions can rearrange and delete
-lines.  If canceled, this Vector will be exactly `['\0', ""]`.  This makes it
+lines.  If canceled, this `Vector` will be exactly `[('\0', "")]`.  This makes it
 convenient to write code which iterates over the results and does things with states
 which aren't `'\0'`, since in the event of a cancel, such code will do nothing.  If
 you wish to specifically detect the return condition, import [didcancelmenu](@ref
@@ -263,7 +263,7 @@ ToggleMenus.didcancelmenu) from `ToggleMenus` and call it on the result.
 
 ## User Functions
 
-To customize the behavior of the menus, a ToggleMenuMaker may be configured with
+To customize the behavior of the menus, a `ToggleMenuMaker` may be configured with
 either or both user functions.  The header, passed first to the menu maker, is
 normally a [`String`](@extref `manual/strings`), but may also be a function.  This
 function will receive the menu as its only argument, and must return a string, which
@@ -317,6 +317,6 @@ which adds this.
 
 The `ToggleMenuMaker` will accept all keywords defined in [`TerminaMenus`](@extref
 `REPL.TerminalMenus.config`), as well as `braces=("【","】")`, to provide an example
-argument.  This is a Tuple of Strings, which will enclose the togglable icons on
+argument.  This is a `Tuple` of `String`s, which will enclose the togglable icons on
 selectable lines.  The printer also accounts for the width of these when deciding
 where to truncate lines.
