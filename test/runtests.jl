@@ -64,4 +64,21 @@ page_up!, pick, printmenu, scroll_wrap, selected, writeline, didcancelmenu
         @test cancel_return[1][2] == ""
         @test didcancelmenu(cancel_return) == true
     end
+    @testset "Menu with inert lines" begin
+        options = [string(c)^3 for c in 'a':'t']
+        settings = ['a', 'b']
+        icons = ['🟢', '🔵']
+        selections = [i % 4 == 0 ? 'a' : '\0' for i in 1:20]
+        template = ToggleMenuMaker("with gaps", settings, icons, scroll_wrap=true)
+        menu = template(options, selections)
+        @test menu.cursor[] == 4
+        @test (menu.cursor[] = move_down!(menu, menu.cursor[])) == 8
+        @test menu.selections[menu.cursor[]] == 'a'
+        @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 4
+        @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 20
+        @test menu.selections[menu.cursor[]] =='a'
+        @test (menu.cursor[] = move_down!(menu, menu.cursor[])) == 4
+        @test menu.selections[menu.cursor[]] == 'a'
+        @test scroll_wrap(menu) == true
+    end
 end

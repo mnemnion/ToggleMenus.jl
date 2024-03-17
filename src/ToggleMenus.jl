@@ -295,6 +295,10 @@ function cancel(menu::ToggleMenu)
     return
 end
 
+function selected(menu::ToggleMenu)
+    return collect(zip(menu.selections, menu.options))
+end
+
 numoptions(menu::ToggleMenu) = length(menu.options)
 
 function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
@@ -306,7 +310,8 @@ function move_up!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
         while cursor < (2+m.pageoffset) && m.pageoffset > 0
             m.pageoffset -= 1 # scroll page up
         end
-    elseif scroll_wrap(m)
+    end
+    if cursor == 1 && scroll_wrap(m)
         # wrap to bottom
         cursor = lastoption
         m.pageoffset = max(0, lastoption - m.pagesize)
@@ -336,7 +341,8 @@ function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
               m.pagesize + m.pageoffset < lastoption
             m.pageoffset += 1 # scroll page down
         end
-    elseif scroll_wrap(m)
+    end
+    if cursor == lastselectable && scroll_wrap(m)
         # wrap to top
         cursor = 1
         m.pageoffset = 0
@@ -431,11 +437,6 @@ function keypress(menu::ToggleMenu, i::UInt32)
         menu.selections[menu.cursor[]] = char
     end
     return menu.keypress(menu, i)
-end
-
-
-function selected(menu::ToggleMenu)
-    return collect(zip(menu.selections, menu.options))
 end
 
 """
