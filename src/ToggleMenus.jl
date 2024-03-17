@@ -342,7 +342,7 @@ function move_down!(m::ToggleMenu, cursor::Int, lastoption::Int=numoptions(m))
             m.pageoffset += 1 # scroll page down
         end
     end
-    if cursor == lastselectable && scroll_wrap(m)
+    if m.cursor[] ≥ lastselectable && scroll_wrap(m)
         # wrap to top
         cursor = 1
         m.pageoffset = 0
