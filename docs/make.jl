@@ -24,11 +24,6 @@ makedocs(
 deploydocs(
     repo = "github.com/mnemnion/ToggleMenus.jl.git",
     branch="gh-pages",
+    devurl="dev",
+    versions=["stable" => "v^", "v#.#"],
 )
-
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
-#=deploydocs(
-    repo = "<repository url>"
-)=#

@@ -82,6 +82,24 @@ page_up!, pick, printmenu, scroll_wrap, selected, writeline, didcancelmenu
         @test menu.selections[menu.cursor[]] == 'a'
         @test scroll_wrap(menu) == true
     end
+
+    @testset "Zeroed-out Selections" begin
+        options = [string(c)^3 for c in 'a':'d']
+        settings = ['a', 'b']
+        selections = fill('\0', length(options))
+        selections[2] = 'a'
+        template = ToggleMenuMaker("with no selectable lines", settings; scroll_wrap=true)
+        menu = template(options, selections)
+        @test menu.cursor[] == 2
+        menu.selections[2] = '\0'
+        @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 1
+        @test (menu.cursor[] = page_down!(menu, menu.cursor[])) == 4
+        @test (menu.cursor[] = page_down!(menu, menu.cursor[])) == 4
+        @test (menu.cursor[] = page_up!(menu, menu.cursor[])) == 1
+        menu.selections[3] = 'b'
+        @test (menu.cursor[] = move_up!(menu, menu.cursor[])) == 3
+    end
+
     @testset "User Functions" begin
         settings = ['a', 'b', 'c']
         header_fn(m) = string(m.selections)
