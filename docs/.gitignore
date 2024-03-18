@@ -1,2 +1,5 @@
 build/
+docs/build/
 site/
+.vscode/
+start.jl
